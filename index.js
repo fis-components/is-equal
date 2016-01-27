@@ -13,7 +13,9 @@ var isRegex = require('is-regex');
 var isString = require('is-string');
 var isSymbol = require('is-symbol');
 var isCallable = require('is-callable');
-var entries = require('object.entries');
+
+var foo = function foo() {};
+var functionsHaveNames = foo.name === 'foo';
 
 var symbolValue = typeof Symbol === 'function' ? Symbol.prototype.valueOf : null;
 var symbolIterator = typeof Symbol === 'function' && isSymbol(Symbol.iterator) ? Symbol.iterator : null;
@@ -24,6 +26,8 @@ if (typeof Object.getOwnPropertyNames === 'function' && typeof Map === 'function
 		}
 	});
 }
+var mapForEach = typeof Map === 'function' ? Map.prototype.forEach : null;
+var setForEach = typeof Set === 'function' ? Set.prototype.forEach : null;
 
 var getPrototypeOf = Object.getPrototypeOf;
 if (!getPrototypeOf) {
@@ -52,6 +56,29 @@ if (!getPrototypeOf) {
 
 var isArray = Array.isArray || function (value) {
 	return toStr.call(value) === '[object Array]';
+};
+
+var normalizeFnWhitespace = function normalizeFnWhitespace(fnStr) {
+	// this is needed in IE 9, at least, which has inconsistencies here.
+	return fnStr.replace(/^function ?\(/, 'function (').replace('){', ') {');
+};
+
+var tryMapSetEntries = function tryMapSetEntries(collection) {
+	var foundEntries = [];
+	try {
+		mapForEach.call(collection, function (key, value) {
+			foundEntries.push([key, value]);
+		});
+	} catch (notMap) {
+		try {
+			setForEach.call(collection, function (value) {
+				foundEntries.push([value]);
+			});
+		} catch (notSet) {
+			return false;
+		}
+	}
+	return foundEntries;
 };
 
 module.exports = function isEqual(value, other) {
@@ -120,11 +147,11 @@ module.exports = function isEqual(value, other) {
 	if (valueIsArrow !== otherIsArrow) { return false; }
 
 	if (isCallable(value) || isCallable(other)) {
-		if (!isEqual(value.name, other.name)) { return false; }
+		if (functionsHaveNames && !isEqual(value.name, other.name)) { return false; }
 		if (!isEqual(value.length, other.length)) { return false; }
 
-		var valueStr = String(value);
-		var otherStr = String(other);
+		var valueStr = normalizeFnWhitespace(String(value));
+		var otherStr = normalizeFnWhitespace(String(other));
 		if (isEqual(valueStr, otherStr)) { return true; }
 
 		if (!valueIsGen && !valueIsArrow) {
@@ -138,28 +165,52 @@ module.exports = function isEqual(value, other) {
 		if (value.isPrototypeOf(other) || other.isPrototypeOf(value)) { return false; }
 		if (getPrototypeOf(value) !== getPrototypeOf(other)) { return false; }
 
-		var valueIteratorFn = value[symbolIterator];
-		var valueIsIterable = isCallable(valueIteratorFn);
-		var otherIteratorFn = other[symbolIterator];
-		var otherIsIterable = isCallable(otherIteratorFn);
-		if (valueIsIterable !== otherIsIterable) {
-			return false;
-		}
-		if (valueIsIterable && otherIsIterable) {
-			var valueIterator = valueIteratorFn.call(value);
-			var otherIterator = otherIteratorFn.call(other);
-			var valueNext, otherNext;
-			do {
-				valueNext = valueIterator.next();
-				otherNext = otherIterator.next();
-				if (!valueNext.done && !otherNext.done && !isEqual(valueNext, otherNext)) {
-					return false;
-				}
-			} while (!valueNext.done && !otherNext.done);
-			return valueNext.done === otherNext.done;
+		if (symbolIterator) {
+			var valueIteratorFn = value[symbolIterator];
+			var valueIsIterable = isCallable(valueIteratorFn);
+			var otherIteratorFn = other[symbolIterator];
+			var otherIsIterable = isCallable(otherIteratorFn);
+			if (valueIsIterable !== otherIsIterable) {
+				return false;
+			}
+			if (valueIsIterable && otherIsIterable) {
+				var valueIterator = valueIteratorFn.call(value);
+				var otherIterator = otherIteratorFn.call(other);
+				var valueNext, otherNext;
+				do {
+					valueNext = valueIterator.next();
+					otherNext = otherIterator.next();
+					if (!valueNext.done && !otherNext.done && !isEqual(valueNext, otherNext)) {
+						return false;
+					}
+				} while (!valueNext.done && !otherNext.done);
+				return valueNext.done === otherNext.done;
+			}
+		} else if (mapForEach || setForEach) {
+			var valueEntries = tryMapSetEntries(value);
+			var otherEntries = tryMapSetEntries(other);
+			if (isArray(valueEntries) !== isArray(otherEntries)) {
+				return false; // either: neither is a Map/Set, or one is and the other isn't.
+			}
+			if (valueEntries && otherEntries) {
+				return isEqual(valueEntries, otherEntries);
+			}
 		}
 
-		return isEqual(entries(value), entries(other));
+		var key;
+		for (key in value) {
+			if (has.call(value, key)) {
+				if (!has.call(other, key)) { return false; }
+				if (!isEqual(value[key], other[key])) { return false; }
+			}
+		}
+		for (key in other) {
+			if (has.call(other, key)) {
+				if (!has.call(value, key)) { return false; }
+				if (!isEqual(other[key], value[key])) { return false; }
+			}
+		}
+		return true;
 	}
 
 	return false;
