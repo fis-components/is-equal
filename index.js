@@ -14,20 +14,15 @@ var isString = require('is-string');
 var isSymbol = require('is-symbol');
 var isCallable = require('is-callable');
 
+var isProto = Object.prototype.isPrototypeOf;
+
 var foo = function foo() {};
 var functionsHaveNames = foo.name === 'foo';
 
 var symbolValue = typeof Symbol === 'function' ? Symbol.prototype.valueOf : null;
-var symbolIterator = typeof Symbol === 'function' && isSymbol(Symbol.iterator) ? Symbol.iterator : null;
-if (typeof Object.getOwnPropertyNames === 'function' && typeof Map === 'function' && typeof Map.prototype.entries === 'function') {
-	Object.getOwnPropertyNames(Map.prototype).forEach(function (name) {
-		if (name !== 'entries' && name !== 'size' && Map.prototype[name] === Map.prototype.entries) {
-			symbolIterator = name;
-		}
-	});
-}
-var mapForEach = typeof Map === 'function' ? Map.prototype.forEach : null;
-var setForEach = typeof Set === 'function' ? Set.prototype.forEach : null;
+var symbolIterator = require('./getSymbolIterator')();
+
+var collectionsForEach = require('./getCollectionsForEach')();
 
 var getPrototypeOf = Object.getPrototypeOf;
 if (!getPrototypeOf) {
@@ -66,12 +61,12 @@ var normalizeFnWhitespace = function normalizeFnWhitespace(fnStr) {
 var tryMapSetEntries = function tryMapSetEntries(collection) {
 	var foundEntries = [];
 	try {
-		mapForEach.call(collection, function (key, value) {
+		collectionsForEach.Map.call(collection, function (key, value) {
 			foundEntries.push([key, value]);
 		});
 	} catch (notMap) {
 		try {
-			setForEach.call(collection, function (value) {
+			collectionsForEach.Set.call(collection, function (value) {
 				foundEntries.push([value]);
 			});
 		} catch (notSet) {
@@ -162,7 +157,7 @@ module.exports = function isEqual(value, other) {
 
 	if (typeof value === 'object' || typeof other === 'object') {
 		if (typeof value !== typeof other) { return false; }
-		if (value.isPrototypeOf(other) || other.isPrototypeOf(value)) { return false; }
+		if (isProto.call(value, other) || isProto.call(other, value)) { return false; }
 		if (getPrototypeOf(value) !== getPrototypeOf(other)) { return false; }
 
 		if (symbolIterator) {
@@ -186,7 +181,7 @@ module.exports = function isEqual(value, other) {
 				} while (!valueNext.done && !otherNext.done);
 				return valueNext.done === otherNext.done;
 			}
-		} else if (mapForEach || setForEach) {
+		} else if (collectionsForEach.Map || collectionsForEach.Set) {
 			var valueEntries = tryMapSetEntries(value);
 			var otherEntries = tryMapSetEntries(other);
 			if (isArray(valueEntries) !== isArray(otherEntries)) {
