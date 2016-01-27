@@ -1,0 +1,21 @@
+{
+    "name": "is-equal",
+    "description": "Are these two values conceptually equal?",
+    "repos": "https://github.com/ljharb/is-equal.git",
+    "main": "index.js",
+    "tag": "master",
+    "reposType": "npm",
+    "dependencies": {
+        "is-arrow-function": "^2.0.3",
+        "is-boolean-object": "^1.0.0",
+        "is-callable": "^1.1.1",
+        "is-date-object": "^1.0.1",
+        "is-generator-function": "^1.0.3",
+        "is-number-object": "^1.0.3",
+        "is-regex": "^1.0.3",
+        "is-string": "^1.0.4",
+        "is-symbol": "^1.0.1",
+        "object.entries": "^1.0.3"
+    },
+    "version": "1.3.0"
+}
